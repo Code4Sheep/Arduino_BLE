@@ -26,6 +26,7 @@ https://github.com/mikalhart/TinyGPSPlus
 REQUIRED BOARD MANAGER
 https://github.com/stm32duino/BoardManagerFiles/raw/master/STM32/package_stm_index.json
 
+Board options (under tools)
 Nucleo 144, F767ZI, Enabled (generic Serial), None, Low/Full speed, default, default, mass storage
 
 GET CUBE PROGRAMMER HERE
