@@ -23,7 +23,7 @@ STM32Timer ITimer(TIM1);
 STM32_ISR_Timer ISR_Timer;
 
 //interval lengths
-#define TIMER_INTERVAL_2S             2000L
+#define TIMER_INTERVAL_10S             2000L
 #define TIMER_INTERVAL_5S            5000L
 
 void TimerHandler()
@@ -60,8 +60,6 @@ char packet[67];
 char buf[12];
 int basez;
 BigNumber mod;
-bool high = false;
-int highrun = 0;
 
 //prev array
 float GPS_PREV_AR[4] = {};
@@ -106,161 +104,6 @@ void removeSpaces(char* s) {
 
 void doingSomething1()
 {
-  if (high == false)
-  {
-    return;
-  }
-  char buf[33];
-  File dataFile = SD.open("test.txt", FILE_WRITE);
-
-  if (mode == 0 && dataFile ) {
-    //print date//
-    char sz[32];
-    sprintf(sz, "%04d/%02d/%02d ", gps.date.year(), gps.date.month(), gps.date.day());
-    Serial.println("date:");
-    Serial.println(sz);
-
-    //print time//
-    Serial.println("time");
-    sprintf(sz, "%02d:%02d:%02d ", gps.time.hour(), gps.time.minute(), gps.time.second());
-    Serial.println(sz);
-    Serial.println("");
-
-    //print lat//
-    Serial.println("Latitude:");
-    Serial.println(GPS_AR[0], 6);
-    dtostrf(GPS_AR[0], -6, 3, buf);
-
-    //append lat to pre encyypt string//
-    strcpy(packet, "A");
-    strcat(packet, buf);
-
-    //print long//
-    Serial.println("Longitude:");
-    Serial.println(GPS_AR[1], 6);
-    dtostrf(GPS_AR[1], -6, 3, buf);
-
-    //print long to pre encrypt string//
-    strcat(packet, "O");
-    strcat(packet, buf);
-
-    //print altitude//
-    Serial.println("Altitude Feet:");
-    Serial.println(GPS_AR[2]);
-    dtostrf(GPS_AR[2], -5, 3, buf);
-
-    //append altitude to pre encrypt string//
-    //do you see the pattern?//
-    strcat(packet, "H");
-    strcat(packet, buf);
-
-    //format speed//
-    Serial.println("Speed:");
-    Serial.println(GPS_AR[3]);
-    dtostrf(GPS_AR[3], -2, 1, buf);
-
-    strcat(packet, "S");
-    strcat(packet, buf);
-
-    //format temp//
-    Serial.println("temperature:");
-    Serial.println(BME_AR[0]);
-    dtostrf(BME_AR[0], -3, 1, buf);
-
-    strcat(packet, "T");
-    strcat(packet, buf);
-
-    //format pressure//
-    Serial.println("pressure:");
-    Serial.println(BME_AR[1]);
-    dtostrf(BME_AR[1], -6, 3, buf);
-
-    strcat(packet, "P");
-    strcat(packet, buf);
-
-    //format humidity//
-    Serial.println("humidity:");
-    Serial.println(BME_AR[2]);
-    dtostrf(BME_AR[2], -4, 3, buf);
-
-    strcat(packet, "W");
-    strcat(packet, buf);
-
-    //format x gforce//
-    Serial.println("X G:");
-    Serial.println(IMU_AR[0]);
-    dtostrf(IMU_AR[0], -3, 2, buf);
-
-    strcat(packet, "X");
-    strcat(packet, buf);
-
-    //format y gforce//
-    Serial.println("Y G:");
-    Serial.println(IMU_AR[1]);
-    dtostrf(IMU_AR[1], -3, 2, buf);
-
-    strcat(packet, "Y");
-    strcat(packet, buf);
-
-    //format z gforce//
-    Serial.println("Z G:");
-    Serial.println(IMU_AR[2]);
-
-    dtostrf(IMU_AR[2], -3, 2, buf);
-    strcat(packet, "Z");
-    strcat(packet, buf);
-
-    //heart rate//
-    float HardRate = random(1, 5) + 60;
-    Serial.println("HR: ");
-    Serial.println(HardRate);
-    dtostrf(HardRate, -2, 1, buf);
-    strcat(packet, "R");
-    strcat(packet, buf);
-
-
-    //prep pre encrypt string//
-    removeSpaces(packet);
-    int lin = sizeof(packet);
-    BigNumber dataNum = inp2BigInt(packet, lin);
-    Serial.println(dataNum);
-    Serial.println(lin);
-
-    //encrypt pre encrypt string//
-    BigNumber encrypted = RSAencrypt(dataNum, pk1, mod);
-    String outputStr = encrypted.toString();
-    //convert to char array
-    const char *outP = outputStr.c_str();
-
-    //push encrypted string
-    ble.write("B");
-    ble.write(outP);
-    Serial.println(packet);
-    Serial.println(outP);
-    ble.write("E");
-
-    //save encrypted string to SD card
-    dataFile.print(outP);
-    dataFile.print("\r\n");
-
-    //flag for data averaging
-    flag = 0;
-
-    //close the file
-    dataFile.close();
-  }
-  else {
-    Serial.println("error opening datalog.txt");
-  }
-
-}
-
-void doingSomething2()
-{
-  if (high == true)
-  {
-    return;
-  }
   char buf[33];
   File dataFile = SD.open("test.txt", FILE_WRITE);
 
@@ -461,14 +304,6 @@ float Gps_Lng_Check(float Lng)
   }
 }
 
-bool checkHigh(){
-  if (BME_AR[0] > 38 || IMU_AR[0] > 3 || IMU_AR[1] > 3 || IMU_AR[2] > 3 || IMU_AR[3] > 3){
-    return true;
-  }
-  else{
-    return false;
-  }
-}
 
 
 BigNumber RSAencrypt(BigNumber dataNum, int power, BigNumber mod)
@@ -489,7 +324,59 @@ BigNumber RSAencrypt(BigNumber dataNum, int power, BigNumber mod)
 }
 
 
-
+//void doingSomething2()
+//{
+//  char buf[33];
+//  File dataFile = SD.open("cool.txt", FILE_WRITE);
+//  if (mode == 1 && dataFile ) {
+//    Serial.println("Latitude:");
+//    //Serial.println(GPS_AR[0], 6);
+//    dataFile.print(GPS_AR[0], 6);
+//    dataFile.print(", ");
+//    //dtostrf(GPS_AR[0], 8, 3, buf);
+//    //ble.write(buf);
+//    //ble.write("\r\n");
+//
+//    Serial.println("Longitude:");
+//    //Serial.println(GPS_AR[1], 6);
+//    dataFile.print(GPS_AR[1], 6);
+//    dataFile.print(", ");
+//    //dtostrf(GPS_AR[1], 8, 3, buf);
+//    //ble.write(buf);
+//    //ble.write("\r\n");
+//
+//    Serial.println("Altitude Feet:");
+//    //Serial.println(GPS_AR[2]);
+//    dataFile.print(GPS_AR[2], 6);
+//    dataFile.print(", ");
+//    //dtostrf(GPS_AR[2], 8, 3, buf);
+//    //ble.write(buf);
+//    //ble.write("\r\n");
+//
+//    Serial.println("temperature:");
+//    //Serial.println(BME_AR[0]);
+//    dataFile.print(BME_AR[0], 6);
+//    dataFile.print(", ");
+//
+//    Serial.println("pressure:");
+//    //Serial.println(BME_AR[1]);
+//    dataFile.print(BME_AR[1], 6);
+//    dataFile.print(", ");
+//
+//    Serial.println("humidity:");
+//    Serial.println(BME_AR[2]);
+//    dataFile.print(BME_AR[2], 6);
+//    dataFile.println("");
+//
+//
+//
+//
+//
+//    flag = 0;
+//    dataFile.close();
+//  }
+//
+//}
 
 double dataVerify(float newData, float oldData) {
   double dif = abs((newData - oldData) / oldData) * 100;
@@ -637,8 +524,8 @@ void setup()
 
   // Just to demonstrate, don't use too many ISR Timers if not absolutely necessary
   // You can use up to 16 timer for each ISR_Timer
-  ISR_Timer.setInterval(TIMER_INTERVAL_2S,    doingSomething1);
-  ISR_Timer.setInterval(TIMER_INTERVAL_5S,    doingSomething2);
+  ISR_Timer.setInterval(TIMER_INTERVAL_10S,    doingSomething1);
+  //ISR_Timer.setInterval(TIMER_INTERVAL_2r5S,    doingSomething2);
 
 
 }
@@ -648,20 +535,6 @@ void loop()
 {
 
 
-
-  if (flag == 1){
-    if (checkHigh()){
-      high = true;
-      highrun = 0;
-    }
-    if (checkHigh() == false && highrun >= 5){
-      high = false;
-    }
-
-  }
-
-
-  
   while (serial_connection.available()) //wait for data
   {
     gps.encode(serial_connection.read());//feed the serial NMEA data
@@ -737,7 +610,6 @@ void loop()
 
 
   flag = 1;
-  highrun += 1;
 
 
 }
