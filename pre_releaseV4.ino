@@ -23,8 +23,9 @@ STM32Timer ITimer(TIM1);
 STM32_ISR_Timer ISR_Timer;
 
 //interval lengths
-#define TIMER_INTERVAL_10S             2000L
+#define TIMER_INTERVAL_10S             5000L
 #define TIMER_INTERVAL_5S            5000L
+#define TIMER_INTERVAL_1S            1000L
 
 void TimerHandler()
 {
@@ -36,13 +37,14 @@ void TimerHandler()
 //////general includes//////
 #include <SPI.h>
 #include <SD.h>
-#include "TinyGPS++.h"
+#include <TinyGPS++.h>
 
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_Sensor.h>
 #include "Adafruit_BME680.h"
 #include <Adafruit_BNO08x.h>
+#include <SoftwareSerial.h>
 
 
 
@@ -59,7 +61,11 @@ int mode = 0;
 char packet[67];
 char buf[12];
 int basez;
-BigNumber mod;
+//BigNumber mod;
+float tempx;
+float tempy;
+float tempz;
+int stepsCnt = 0;
 
 //prev array
 float GPS_PREV_AR[4] = {};
@@ -67,31 +73,35 @@ float BME_PREV_AR[3] = {};
 float IMU_PREV_AR[3] = {};
 
 
+
 //main array
 float GPS_AR[4] = {};
 float BME_AR[3] = {};
 float IMU_AR[3] = {};
 
-//int  pk1 = 129; // public key one (exponent) can be adjusted
+int  pk1 = 129; // public key one (exponent) can be adjusted
+char pk2[] = "10283216039871810935867070308763590033267924706279480036805479708407577958672010439491502023522562278580887361154108790868660131671345775095268853731990497";
+BigNumber mod = BigNumber(pk2); //converts number in string form to BigNumber data type
 
-//char pk2[] = "10283216039871810935867070308763590033267924706279480036805479708407577958672010439491502023522562278580887361154108790868660131671345775095268853731990497";
-//BigNumber mod = BigNumber(pk2); //converts number in string form to BigNumber data type
+//int pk1;
+//char pk2[155];
 
-int pk1;
-char pk2[155];
-
+TinyGPSPlus gps;
 Adafruit_BME680 bme; // I2C
 Adafruit_BNO08x  bno08x(BNO08X_RESET);
 sh2_SensorValue_t sensorValue;
 HardwareSerial ble(D52, D53); // RX, TX
-HardwareSerial serial_connection(D0, D1); //RX=pin 0, TX=pin 1
-TinyGPSPlus gps;
+//SoftwareSerial serial_connection(1, 0);
+SoftwareSerial ss(1, 0);
 
 //////FUNCTIONS//////
 void setReports(void) {
   Serial.println("Setting desired reports");
   if (!bno08x.enableReport(SH2_ACCELEROMETER)) {
     Serial.println("Could not enable accelerometer");
+  }
+  if (!bno08x.enableReport(SH2_STEP_COUNTER)) {
+    Serial.println("Could not enable step counter");
   }
 }
 
@@ -101,6 +111,17 @@ void(* resetFunc) (void) = 0;
 void removeSpaces(char* s) {
   *std::remove(s, s + strlen(s), ' ') = 0;
 }
+
+static void smartDelay(unsigned long ms)
+{
+  unsigned long start = millis();
+  do
+  {
+    while (ss.available())
+      gps.encode(ss.read());
+  } while (millis() - start < ms);
+}
+
 
 void doingSomething1()
 {
@@ -173,12 +194,12 @@ void doingSomething1()
     strcat(packet, buf);
 
     //format humidity//
-    Serial.println("humidity:");
-    Serial.println(BME_AR[2]);
-    dtostrf(BME_AR[2], -4, 3, buf);
-
-    strcat(packet, "W");
-    strcat(packet, buf);
+    //    Serial.println("humidity:");
+    //    Serial.println(BME_AR[2]);
+    //    dtostrf(BME_AR[2], -4, 3, buf);
+    //
+    //    strcat(packet, "W");
+    //    strcat(packet, buf);
 
     //format x gforce//
     Serial.println("X G:");
@@ -202,6 +223,15 @@ void doingSomething1()
 
     dtostrf(IMU_AR[2], -3, 2, buf);
     strcat(packet, "Z");
+    strcat(packet, buf);
+
+
+    //format steps//
+    Serial.println("Steps:");
+    Serial.println(stepsCnt);
+
+    dtostrf(stepsCnt, 0, 5, buf);
+    strcat(packet, "C");
     strcat(packet, buf);
 
     //heart rate//
@@ -403,6 +433,11 @@ float ZeroHandle (float N, float D)
     return N / D;
 }
 
+void append(char* s, char c) {
+  int len = strlen(s);
+  s[len] = c;
+  s[len + 1] = '\0';
+}
 
 
 
@@ -410,7 +445,7 @@ void setup()
 {
   //serial and GPS
   Serial.begin(9600);
-  serial_connection.begin(9600);//This opens up communications to the GPS
+  ss.begin(9600);//This opens up communications to the GPS
   Serial.println("GPS online.");
 
   // Set interval in microsecs
@@ -431,37 +466,43 @@ void setup()
 
 
 
-  //get PUBLIC KEYS from SD card
-  File securityFile = SD.open("Secure.txt", FILE_READ);
-  String received = "";
-  char ch;
-  while (securityFile.available()) {
-    ch = securityFile.read();
-    if (ch == '\n')
-    {
-      break;
-    }
-    else {
-      received += ch;
-    }
-  }
-  pk1 = received.toInt();
-
-  char in[1];
-  while (securityFile.available()) {
-    ch = securityFile.read();
-    if (ch == '\n')
-    {
-      break;
-    }
-    else {
-      in[0] = ch;
-      strcat(pk2, in);
-    }
-  }
-
-  //close file
-  securityFile.close();
+  //  //get PUBLIC KEYS from SD card
+  //  File securityFile = SD.open("Secure.txt", FILE_READ);
+  //  String received = "";
+  //  char ch;
+  //  while (securityFile.available()) {
+  //    ch = securityFile.read();
+  //    if (ch == '\n')
+  //    {
+  //      break;
+  //    }
+  //    else {
+  //      received += ch;
+  //    }
+  //  }
+  //  pk1 = received.toInt();
+  //  Serial.println(pk1);
+  //
+  //  char in[0];
+  //  while (securityFile.available()) {
+  //    ch = securityFile.read();
+  //    if (ch == '\n')
+  //    {
+  //      break;
+  //    }
+  //    else {
+  //      //      in[0] = ch;
+  //      //      Serial.println(ch);
+  //      //       Serial.println(in);
+  //      //      strcat(pk2, in);
+  //      append(pk2, ch);
+  //    }
+  //  }
+  //  removeSpaces(pk2);
+  //  Serial.println(pk2);
+  //
+  //  //close file
+  //  securityFile.close();
 
 
   //init BME
@@ -499,10 +540,10 @@ void setup()
     Serial.println("Failed to find BNO08x chip");
 
 
-    while (1) {
-      delay(1000);
-      //ble.write("RESET");
-    }
+    //    while (1) {
+    //      delay(1000);
+    //      //ble.write("RESET");
+    //    }
   }
   setReports();
   Serial.println("Reading events");
@@ -520,12 +561,16 @@ void setup()
     basez += sensorValue.un.accelerometer.z;
   }
 
-  basez = basez/10;
+  basez = 9.8;
+  Serial.println(basez);
 
   // Just to demonstrate, don't use too many ISR Timers if not absolutely necessary
   // You can use up to 16 timer for each ISR_Timer
   ISR_Timer.setInterval(TIMER_INTERVAL_10S,    doingSomething1);
   //ISR_Timer.setInterval(TIMER_INTERVAL_2r5S,    doingSomething2);
+  //ISR_Timer.setInterval(TIMER_INTERVAL_1S, GPSTIMER);
+
+
 
 
 }
@@ -535,32 +580,37 @@ void loop()
 {
 
 
-  while (serial_connection.available()) //wait for data
-  {
-    gps.encode(serial_connection.read());//feed the serial NMEA data
-  }
-  if (gps.location.isUpdated()) //full package only
-  {
-    if (flag == 0) {
-      GPS_AR[0] = Gps_Lat_Check(gps.location.lat());
-      GPS_AR[1] = Gps_Lng_Check(gps.location.lng());
-      GPS_AR[2] = gps.altitude.feet();
-      GPS_AR[3] = gps.speed.mph();
-    }
-    else {
-      GPS_AR[0] = (dataVerify(gps.location.lat(), GPS_AR[0]) + GPS_AR[0]) / 2;
-      GPS_AR[1] = (dataVerify(gps.location.lng(), GPS_AR[1]) + GPS_AR[1]) / 2;
-      GPS_AR[2] = (dataVerify(gps.altitude.feet(), GPS_AR[2]) + GPS_AR[2]) / 2;
-      GPS_AR[3] = (dataVerify(gps.speed.mph(), GPS_AR[3]) + GPS_AR[3]) / 2;
-    }
-  }
+  //  while (serial_connection.available()) //wait for data
+  //  {
+  //    gps.encode(serial_connection.read());//feed the serial NMEA data
+  //  }
+  //  if (gps.location.isUpdated()) //full package only
+  //  {
+  //    if (flag == 0) {
+  //      GPS_AR[0] = Gps_Lat_Check(gps.location.lat());
+  //      GPS_AR[1] = Gps_Lng_Check(gps.location.lng());
+  //      GPS_AR[2] = gps.altitude.feet();
+  //      GPS_AR[3] = gps.speed.mph();
+  //    }
+  //    else {
+  //      GPS_AR[0] = (dataVerify(gps.location.lat(), GPS_AR[0]) + GPS_AR[0]) / 2;
+  //      GPS_AR[1] = (dataVerify(gps.location.lng(), GPS_AR[1]) + GPS_AR[1]) / 2;
+  //      GPS_AR[2] = (dataVerify(gps.altitude.feet(), GPS_AR[2]) + GPS_AR[2]) / 2;
+  //      GPS_AR[3] = (dataVerify(gps.speed.mph(), GPS_AR[3]) + GPS_AR[3]) / 2;
+  //    }
+  //  }
+
+
+
+
+
 
   if (! bme.performReading()) {
     Serial.println("Failed to perform reading :(");
     return;
   }
   if (flag == 0) {
-    BME_AR[0] = bme.temperature;
+    BME_AR[0] = 1.8 * ( bme.temperature) + 32;
     BME_AR[1] = bme.pressure / 100.0;
     BME_AR[2] = bme.humidity;
   }
@@ -581,9 +631,9 @@ void loop()
 
   switch (sensorValue.sensorId) {
     case SH2_ACCELEROMETER:
-      int tempx = sensorValue.un.accelerometer.x;
-      int tempy = sensorValue.un.accelerometer.y;
-      int tempz = sensorValue.un.accelerometer.z;
+      tempx = sensorValue.un.accelerometer.x;
+      tempy = sensorValue.un.accelerometer.y;
+      tempz = sensorValue.un.accelerometer.z;
       if (tempx < 0.1)
       {
         IMU_AR[0] = 0;
@@ -605,8 +655,39 @@ void loop()
       else {
         IMU_AR[2] = tempz / basez;
       }
+      break;
+    case SH2_STEP_COUNTER:
+      stepsCnt = sensorValue.un.stepCounter.steps;
+      break;
 
   }
+     
+    while (ss.available() > 0) {
+      if (gps.encode(ss.read())) {    
+        if (gps.location.isValid()) {
+          GPS_AR[0] = Gps_Lat_Check(gps.location.lat());
+          GPS_AR[1] = Gps_Lng_Check(gps.location.lng());
+          if (GPS_AR[0] > 0) {
+            GPS_AR[0] = 2 * GPS_AR[0];
+          }
+          if (GPS_AR[1] > 0) {
+            GPS_AR[1] = 2 * GPS_AR[0];
+          }
+  
+          GPS_AR[0] = abs(GPS_AR[0]);
+          GPS_AR[1] = abs(GPS_AR[1]);
+
+          GPS_AR[2] = gps.altitude.feet();
+          GPS_AR[3] = gps.speed.mph();
+          break;
+  
+        }
+      }
+    }
+
+
+
+
 
 
   flag = 1;
