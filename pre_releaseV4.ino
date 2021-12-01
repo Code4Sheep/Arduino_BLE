@@ -194,12 +194,12 @@ void doingSomething1()
     strcat(packet, buf);
 
     //format humidity//
-    //    Serial.println("humidity:");
-    //    Serial.println(BME_AR[2]);
-    //    dtostrf(BME_AR[2], -4, 3, buf);
-    //
-    //    strcat(packet, "W");
-    //    strcat(packet, buf);
+        Serial.println("humidity:");
+        Serial.println(BME_AR[2]);
+        dtostrf(BME_AR[2], -4, 3, buf);
+    
+        strcat(packet, "W");
+        strcat(packet, buf);
 
     //format x gforce//
     Serial.println("X G:");
@@ -665,17 +665,9 @@ void loop()
     while (ss.available() > 0) {
       if (gps.encode(ss.read())) {    
         if (gps.location.isValid()) {
-          GPS_AR[0] = Gps_Lat_Check(gps.location.lat());
-          GPS_AR[1] = Gps_Lng_Check(gps.location.lng());
-          if (GPS_AR[0] > 0) {
-            GPS_AR[0] = 2 * GPS_AR[0];
-          }
-          if (GPS_AR[1] > 0) {
-            GPS_AR[1] = 2 * GPS_AR[0];
-          }
-  
-          GPS_AR[0] = abs(GPS_AR[0]);
-          GPS_AR[1] = abs(GPS_AR[1]);
+          GPS_AR[0] = Gps_Lat_Check(gps.location.lat())+90;
+          GPS_AR[1] = Gps_Lng_Check(gps.location.lng())+180;
+
 
           GPS_AR[2] = gps.altitude.feet();
           GPS_AR[3] = gps.speed.mph();
